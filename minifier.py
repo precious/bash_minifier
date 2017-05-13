@@ -12,7 +12,8 @@ class BashFileIterator:
         self.pos = 0
         self.insideString = False
         self.insideComment = False
-        self._CBVE_counter = 0  # CurlyBracesVariableExpansion
+        self._CBE_counter = 0  # Curly Braces Expansion
+        self._PBE_counter = 0  # Parenthesis Expansion
         self._stringBeginsWith = ""
 
     def getPreviousCharacters(self, n):
@@ -72,17 +73,24 @@ class BashFileIterator:
                     elif not self.insideString:
                         self._stringBeginsWith = ch
                         self.insideString = True
-                elif ch == "#" and not self.isInsideStringOrCBVE() and self.getPreviousCharacter() in "\n\t ;":
+                elif ch == "#" and not self.isInsideStringOrCBEOrPBE() and self.getPreviousCharacter() in "\n\t ;":
                     self.insideComment = True
                 elif ch == "\n" and self.insideComment:
                     self.insideComment = False
                 elif ch == '{' and self.getPreviousCharacter() == '$' and not self.insideComment and \
-                        not self.isInsideSingleQuotedString() and not self.isInsideCBVE():
-                    self._CBVE_counter = 1
-                elif ch == '{' and not self.isInsideSingleQuotedString() and self.isInsideCBVE():
-                    self._CBVE_counter += 1
-                elif ch == '}' and not self.isInsideSingleQuotedString() and self.isInsideCBVE():
-                    self._CBVE_counter -= 1
+                        not self.isInsideSingleQuotedString() and not self.isInsideCBE():
+                    self._CBE_counter = 1
+                elif ch == '{' and not self.isInsideSingleQuotedString() and self.isInsideCBE():
+                    self._CBE_counter += 1
+                elif ch == '}' and not self.isInsideSingleQuotedString() and self.isInsideCBE():
+                    self._CBE_counter -= 1
+                elif ch == '(' and self.getPreviousCharacter() == '$' and not self.insideComment and \
+                        not self.isInsideSingleQuotedString() and not self.isInsidePBE():
+                    self._PBE_counter = 1
+                elif ch == '(' and not self.isInsideSingleQuotedString() and self.isInsidePBE():
+                    self._PBE_counter += 1
+                elif ch == ')' and not self.isInsideSingleQuotedString() and self.isInsidePBE():
+                    self._PBE_counter -= 1
                 escaped = False
             yield ch
             self.pos += 1
@@ -100,11 +108,14 @@ class BashFileIterator:
     def isInsideComment(self):
         return self.insideComment
 
-    def isInsideCBVE(self):
-        return self._CBVE_counter > 0
+    def isInsideCBE(self):
+        return self._CBE_counter > 0
 
-    def isInsideStringOrCBVE(self):
-        return self.insideString or self.isInsideCBVE()
+    def isInsidePBE(self):
+        return self._PBE_counter > 0
+
+    def isInsideStringOrCBEOrPBE(self):
+        return self.insideString or self.isInsideCBE() or self.isInsidePBE()
 
 
 def minify(src):
@@ -121,7 +132,7 @@ def minify(src):
     emptyLine = True
     previousSpacePrinted = True
     for ch in it.charactersGenerator():
-        if it.isInsideStringOrCBVE():
+        if it.isInsideStringOrCBEOrPBE():
             src += ch
         elif ch == "\\" and it.getNextCharacter() == "\n":
             it.skipNextCharacter()
@@ -143,7 +154,7 @@ def minify(src):
     it = BashFileIterator(src)
     src = ""  # result
     for ch in it.charactersGenerator():
-        if it.isInsideStringOrCBVE() or ch != "\n":
+        if it.isInsideStringOrCBEOrPBE() or ch != "\n":
             src += ch
         else:
             prevWord = it.getPreviousWord()
@@ -156,11 +167,11 @@ def minify(src):
             elif it.getNextCharacter() != "" and it.getPreviousCharacter() != ";":
                 src += ";"
 
-    # finaly remove spaces around semicolons
+    # finally remove spaces around semicolons
     it = BashFileIterator(src)
     src = ""  # result
     for ch in it.charactersGenerator():
-        if it.isInsideStringOrCBVE():
+        if it.isInsideStringOrCBEOrPBE():
             src += ch
         elif ch in ' \t' and (it.getPreviousCharacter() == ";" or it.getNextCharacter() == ";"):
             continue
@@ -172,6 +183,8 @@ def minify(src):
 
 if __name__ == "__main__":
     # TODO check all bash keywords and ensure that they are handled correctly
+    # https://www.gnu.org/software/bash/manual/html_node/Reserved-Word-Index.html
+    # http://pubs.opengroup.org/onlinepubs/009695399/utilities/xcu_chap02.html
 
     # get bash source from file or from stdin
     src = ""
