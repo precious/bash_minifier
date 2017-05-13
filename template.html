@@ -1,0 +1,28 @@
+<html>
+  <head>
+    <title>Bash Minifier</title>
+    <meta charset="utf-8">
+    <style>
+    .small {
+      font-size:small;
+    }
+    </style>
+  </head>
+
+  <body>
+    <h1>Bash Scripts Minifier</h1>
+    Known issues:
+    <ul>
+      <li>not supported minifying of <a href="http://en.wikipedia.org/wiki/Here_document#Unix_shells">heredocs</a></li>
+    </ul>
+    <form method="POST" action="/">
+        <textarea name="user_source" rows="40" cols="100">%(user_source)s</textarea>
+        <br>
+        <input type="submit" value="Minify"/>
+    </form>
+    <textarea rows="40" cols="100">%(processed_source)s</textarea>
+    <br><br>
+    <span class="small">please report problems to vs.kulaga (at) gmail.com</span>
+    <!-- 1 -->
+  </body>
+</html>

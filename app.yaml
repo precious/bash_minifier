@@ -1,0 +1,9 @@
+application: bash-minifier
+version: 1
+runtime: python27
+api_version: 1
+threadsafe: true
+
+handlers:
+- url: /.*
+  script: bash_minifier.application
