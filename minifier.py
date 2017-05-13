@@ -10,23 +10,22 @@ class BashFileIterator:
 
     def reset(self):
         self.pos = 0
-        self.previousCharacter = ""
         self.insideString = False
         self.insideComment = False
         self._CBVE_counter = 0  # CurlyBracesVariableExpansion
         self._stringBeginsWith = ""
 
-    def getPreviousCharacter(self):
-        return self.previousCharacter
-
-    def getNextCharacter(self):
-        return self.src[self.pos + 1:self.pos + 2]
-
     def getPreviousCharacters(self, n):
         return self.src[max(0, self.pos - n):self.pos]
 
+    def getPreviousCharacter(self):
+        return self.getPreviousCharacters(1)
+
     def getNextCharacters(self, n):
         return self.src[self.pos + 1:self.pos + n + 1]
+
+    def getNextCharacter(self):
+        return self.getNextCharacters(1)
 
     def getPreviousWord(self):
         word = ''
@@ -50,8 +49,11 @@ class BashFileIterator:
             i += 1
         return word
 
+    def skipNextCharacters(self, n):
+        self.pos += n
+
     def skipNextCharacter(self):
-        self.pos += 1
+        self.skipNextCharacters(1)
 
     def charactersGenerator(self):
         self._stringBeginsWith = ""
@@ -70,11 +72,11 @@ class BashFileIterator:
                     elif not self.insideString:
                         self._stringBeginsWith = ch
                         self.insideString = True
-                elif ch == "#" and not self.isInsideStringOrCBVE() and not self.previousCharacter == "$":
+                elif ch == "#" and not self.isInsideStringOrCBVE() and self.getPreviousCharacter() in "\n\t ;":
                     self.insideComment = True
                 elif ch == "\n" and self.insideComment:
                     self.insideComment = False
-                elif ch == '{' and self.previousCharacter == '$' and not self.insideComment and \
+                elif ch == '{' and self.getPreviousCharacter() == '$' and not self.insideComment and \
                         not self.isInsideSingleQuotedString() and not self.isInsideCBVE():
                     self._CBVE_counter = 1
                 elif ch == '{' and not self.isInsideSingleQuotedString() and self.isInsideCBVE():
@@ -83,7 +85,6 @@ class BashFileIterator:
                     self._CBVE_counter -= 1
                 escaped = False
             yield ch
-            self.previousCharacter = ch
             self.pos += 1
         raise StopIteration
 
@@ -170,6 +171,8 @@ def minify(src):
 
 
 if __name__ == "__main__":
+    # TODO check all bash keywords and ensure that they are handled correctly
+
     # get bash source from file or from stdin
     src = ""
     if len(sys.argv) > 1:
