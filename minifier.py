@@ -31,11 +31,22 @@ class BashFileIterator:
         i = 1
         while i <= self.pos:
             newWord = self.getPreviousCharacters(i)
-            if newWord.isalpha():
-                word = newWord
-            else:
-                return word
+            if not newWord.isalpha():
+                break
+            word = newWord
             i += 1
+        return word
+
+    def getNextWord(self):
+        word = ''
+        i = 1
+        while self.pos + i < len(self.src):
+            newWord = self.getNextCharacters(i)
+            if not newWord.isalpha():
+                break
+            word = newWord
+            i += 1
+        return word
 
     def charactersGenerator(self):
         stringBeginsWith = ""
@@ -110,9 +121,12 @@ def minify(src):
             src += ch
         else:
             prevWord = it.getPreviousWord()
+            nextWord = it.getNextWord()
             if prevWord in ("then", "do", "else", "in") or it.getPreviousCharacter() in ("{", "(") or \
                             it.getPreviousCharacters(2) in ("&&", "||"):
                 src += " "
+            elif nextWord in ("esac",) and it.getPreviousCharacters(2) != ';;':
+                src += ';;'
             elif it.getNextCharacter() != "" and it.getPreviousCharacter() != ";":
                 src += ";"
 
