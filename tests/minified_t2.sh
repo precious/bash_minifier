@@ -1,0 +1,1 @@
+tname=${tname#*.}
