@@ -208,13 +208,13 @@ def minify(src):
             elif it.getNextCharacter() != "" and it.getPreviousCharacter() != ";":
                 src += ";"
 
-    # finally remove spaces around semicolons
+    # finally remove spaces around semicolons and pipes
     it = BashFileIterator(src)
     src = ""  # result
     for ch in it.charactersGenerator():
         if it.isInsideStringOrHereDocOrCBEOrPBE():
             src += ch
-        elif ch in ' \t' and (it.getPreviousCharacter() == ";" or it.getNextCharacter() == ";"):
+        elif ch in ' \t' and (it.getPreviousCharacter() in ";|" or it.getNextCharacter() in ";|"):
             continue
         else:
             src += ch
