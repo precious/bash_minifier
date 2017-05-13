@@ -2,6 +2,7 @@
 
 import sys
 
+
 class BashFileIterator:
     def __init__(self, src):
         self.src = src
@@ -17,13 +18,13 @@ class BashFileIterator:
         return self.previousCharacter
 
     def getNextCharacter(self):
-        return self.src[self.pos+1:self.pos+2]
+        return self.src[self.pos + 1:self.pos + 2]
 
-    def getPreviousCharacters(self,n):
-        return self.src[max(0,self.pos - n):self.pos]
+    def getPreviousCharacters(self, n):
+        return self.src[max(0, self.pos - n):self.pos]
 
-    def getNextCharacters(self,n):
-        return self.src[self.pos+1:self.pos+n+1]
+    def getNextCharacters(self, n):
+        return self.src[self.pos + 1:self.pos + n + 1]
 
     def getPreviousWord(self):
         word = ''
@@ -73,14 +74,14 @@ class BashFileIterator:
 def minify(src):
     # first remove all comments
     it = BashFileIterator(src)
-    src = "" # result
+    src = ""  # result
     for ch in it.charactersGenerator():
         if not it.isInsideComment():
             src += ch
 
     # second remove empty strings and strip lines
     it = BashFileIterator(src)
-    src = "" # result
+    src = ""  # result
     emptyLine = True
     previousSpacePrinted = True
     for ch in it.charactersGenerator():
@@ -93,9 +94,9 @@ def minify(src):
             src += " "
             previousSpacePrinted = True
         elif ch == "\n" and it.getPreviousCharacter() != "\n" and not emptyLine:
-                src += ch
-                previousSpacePrinted = True
-                emptyLine = True
+            src += ch
+            previousSpacePrinted = True
+            emptyLine = True
         elif ch not in " \t\n":
             src += ch
             previousSpacePrinted = False
@@ -103,21 +104,21 @@ def minify(src):
 
     # third get rid of newlines
     it = BashFileIterator(src)
-    src = "" # result
+    src = ""  # result
     for ch in it.charactersGenerator():
         if it.isInsideString() or ch != "\n":
             src += ch
         else:
             prevWord = it.getPreviousWord()
             if prevWord in ("then", "do", "else", "in") or it.getPreviousCharacter() in ("{", "(") or \
-                it.getPreviousCharacters(2) in ("&&", "||"):
+                            it.getPreviousCharacters(2) in ("&&", "||"):
                 src += " "
             elif it.getNextCharacter() != "" and it.getPreviousCharacter() != ";":
                 src += ";"
 
     # finaly remove spaces around semicolons
     it = BashFileIterator(src)
-    src = "" # result
+    src = ""  # result
     for ch in it.charactersGenerator():
         if it.isInsideString():
             src += ch
@@ -125,12 +126,12 @@ def minify(src):
             continue
         else:
             src += ch
-    
+
     return src
 
 
 if __name__ == "__main__":
-    # get bash source from file or fron stdin
+    # get bash source from file or from stdin
     src = ""
     if len(sys.argv) > 1:
         with open(sys.argv[1], "r") as ifile:
@@ -138,5 +139,3 @@ if __name__ == "__main__":
     else:
         src = sys.stdin.read()
     print minify(src)
-
-
