@@ -13,6 +13,8 @@ class BashFileIterator:
         self.previousCharacter = ""
         self.insideString = False
         self.insideComment = False
+        self._CBVE_counter = 0  # CurlyBracesVariableExpansion
+        self._stringBeginsWith = ""
 
     def getPreviousCharacter(self):
         return self.previousCharacter
@@ -48,8 +50,11 @@ class BashFileIterator:
             i += 1
         return word
 
+    def skipNextCharacter(self):
+        self.pos += 1
+
     def charactersGenerator(self):
-        stringBeginsWith = ""
+        self._stringBeginsWith = ""
         escaped = False
         while self.pos < len(self.src):
             ch = self.src[self.pos]
@@ -57,18 +62,25 @@ class BashFileIterator:
             if ch == "\\":
                 escaped = not escaped
             else:
-                if (ch in "\"'`") and not escaped and not self.insideComment:
-                    if self.insideString and stringBeginsWith == ch:
-                        stringBeginsWith = ""
+                # if (ch in "\"'`") and not escaped and not self.insideComment:
+                if (ch in "\"'") and not escaped and not self.insideComment:
+                    if self.insideString and self._stringBeginsWith == ch:
+                        self._stringBeginsWith = ""
                         self.insideString = False
                     elif not self.insideString:
-                        stringBeginsWith = ch
+                        self._stringBeginsWith = ch
                         self.insideString = True
-                elif ch == "#" and not self.insideString and \
-                        not self.previousCharacter == "$" and not self.getPreviousCharacters(2) == "${":
+                elif ch == "#" and not self.isInsideStringOrCBVE() and not self.previousCharacter == "$":
                     self.insideComment = True
                 elif ch == "\n" and self.insideComment:
                     self.insideComment = False
+                elif ch == '{' and self.previousCharacter == '$' and not self.insideComment and \
+                        not self.isInsideSingleQuotedString() and not self.isInsideCBVE():
+                    self._CBVE_counter = 1
+                elif ch == '{' and not self.isInsideSingleQuotedString() and self.isInsideCBVE():
+                    self._CBVE_counter += 1
+                elif ch == '}' and not self.isInsideSingleQuotedString() and self.isInsideCBVE():
+                    self._CBVE_counter -= 1
                 escaped = False
             yield ch
             self.previousCharacter = ch
@@ -78,8 +90,20 @@ class BashFileIterator:
     def isInsideString(self):
         return self.insideString
 
+    def isInsideDoubleQuotedString(self):
+        return self.insideString and self._stringBeginsWith == '"'
+
+    def isInsideSingleQuotedString(self):
+        return self.insideString and self._stringBeginsWith == "'"
+
     def isInsideComment(self):
         return self.insideComment
+
+    def isInsideCBVE(self):
+        return self._CBVE_counter > 0
+
+    def isInsideStringOrCBVE(self):
+        return self.insideString or self.isInsideCBVE()
 
 
 def minify(src):
@@ -96,9 +120,10 @@ def minify(src):
     emptyLine = True
     previousSpacePrinted = True
     for ch in it.charactersGenerator():
-        if it.isInsideString():
+        if it.isInsideStringOrCBVE():
             src += ch
         elif ch == "\\" and it.getNextCharacter() == "\n":
+            it.skipNextCharacter()
             continue
         elif ch in " \t" and not previousSpacePrinted and not emptyLine and \
                 not it.getNextCharacter() in " \t\n" and not it.getNextCharacters(2) == "\\\n":
@@ -117,7 +142,7 @@ def minify(src):
     it = BashFileIterator(src)
     src = ""  # result
     for ch in it.charactersGenerator():
-        if it.isInsideString() or ch != "\n":
+        if it.isInsideStringOrCBVE() or ch != "\n":
             src += ch
         else:
             prevWord = it.getPreviousWord()
@@ -134,7 +159,7 @@ def minify(src):
     it = BashFileIterator(src)
     src = ""  # result
     for ch in it.charactersGenerator():
-        if it.isInsideString():
+        if it.isInsideStringOrCBVE():
             src += ch
         elif ch in ' \t' and (it.getPreviousCharacter() == ";" or it.getNextCharacter() == ";"):
             continue
