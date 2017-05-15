@@ -6,4 +6,4 @@ threadsafe: true
 
 handlers:
 - url: /.*
-  script: bash_minifier.application
+  script: app_engine_handlers.application
