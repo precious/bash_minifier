@@ -17,6 +17,14 @@ class BashFileIterator:
         self._PBE_counter = 0  # Parenthesis Expansion
         self._stringBeginsWith = ""
 
+        # possible characters in stack:
+        # (, ) -- means Arithmetic Expansion or Command Substitution
+        # {, } -- means Parameter Expansion
+        # ` -- means Command Substitution
+        # ' -- means single-quoted string
+        # " -- means double-quoted string
+        self._delimiters_stack = []
+
     def getPreviousCharacters(self, n):
         return self.src[max(0, self.pos - n):self.pos]
 
@@ -74,7 +82,6 @@ class BashFileIterator:
         self.skipNextCharacters(1)
 
     def charactersGenerator(self):
-        self._stringBeginsWith = ""
         hereDocWord = ''
         _closeHereDocAfterYield = False
         escaped = False
@@ -84,47 +91,51 @@ class BashFileIterator:
             if ch == "\\":
                 escaped = not escaped
             else:
-                # if (ch in "\"'`") and not escaped and not self.insideComment:
-                if (ch in "\"'") and not self.isInsideCommentOrHereDoc():
-                    if self.insideString and self._stringBeginsWith == ch:
-                        if ch == '"' and not escaped or ch == "'":  # single quote can't be escaped inside
-                                                                    # single-quoted string
-                            self._stringBeginsWith = ""
-                            self.insideString = False
-                    elif not self.insideString and not escaped:
-                        self._stringBeginsWith = ch
-                        self.insideString = True
-                elif ch == "#" and not self.isInsideStringOrHereDocOrCBEOrPBE() and \
-                        self.getPreviousCharacter() in "\n\t ;":
-                    self.insideComment = True
-                elif ch == '{' and self.getPreviousCharacter() == '$' and not self.isInsideCommentOrHereDoc() and \
-                        not self.isInsideSingleQuotedString() and not self.isInsideCBE():
-                    self._CBE_counter = 1
-                elif ch == '{' and not self.isInsideSingleQuotedString() and self.isInsideCBE():
-                    self._CBE_counter += 1
-                elif ch == '}' and not self.isInsideSingleQuotedString() and self.isInsideCBE():
-                    self._CBE_counter -= 1
-                elif ch == '(' and self.getPreviousCharacter() == '$' and not self.isInsideCommentOrHereDoc() and \
-                        not self.isInsideSingleQuotedString() and not self.isInsidePBE():
-                    self._PBE_counter = 1
-                elif ch == '(' and not self.isInsideSingleQuotedString() and self.isInsidePBE():
-                    self._PBE_counter += 1
-                elif ch == ')' and not self.isInsideSingleQuotedString() and self.isInsidePBE():
-                    self._PBE_counter -= 1
-                elif ch == '<' and self.getPreviousCharacter() == '<' and self.getPreviousCharacters(2) != '<<' and \
-                        self.getNextCharacter() != '<' and \
-                        not self.insideComment and not self.isInsideStringOrHereDocOrCBEOrPBE():
-                    # heredoc
-                    self.insideHereDoc = True
-                    hereDocWord = self.getPartOfLineAfterPos()
-                    if hereDocWord[0] == '-':
-                        hereDocWord = hereDocWord[1:]
-                    hereDocWord = hereDocWord.strip().replace('"', '').replace("'", '')
-                elif ch == "\n":
+                if ch == "\n":
                     if self.insideComment:
                         self.insideComment = False
                     elif self.insideHereDoc and self.getPartOfLineBeforePos() == hereDocWord:
                         _closeHereDocAfterYield = True
+
+                elif not self.isInsideCommentOrHereDoc():
+
+                    if ch in "\"'":
+                        if self.insideString and self._stringBeginsWith == ch:
+                            if ch == '"' and not escaped or ch == "'":  # single quote can't be escaped inside
+                                # single-quoted string
+                                self._stringBeginsWith = ""
+                                self.insideString = False
+                        elif not self.insideString and not escaped:
+                            self._stringBeginsWith = ch
+                            self.insideString = True
+
+                    elif not self.isInsideSingleQuotedString():
+                        if ch == "#" and not self.isInsideStringOrExpOrSubst() and \
+                                        self.getPreviousCharacter() in "\n\t ;":
+                            self.insideComment = True
+                        elif ch == '{' and self.getPreviousCharacter() == '$' and not self.isInsideCBE():
+                            self._CBE_counter = 1
+                        elif ch == '{' and self.isInsideCBE():
+                            self._CBE_counter += 1
+                        elif ch == '}' and self.isInsideCBE():
+                            self._CBE_counter -= 1
+                        elif ch == '(' and self.getPreviousCharacter() == '$' and not self.isInsidePBE():
+                            self._PBE_counter = 1
+                        elif ch == '(' and self.isInsidePBE():
+                            self._PBE_counter += 1
+                        elif ch == ')' and self.isInsidePBE():
+                            self._PBE_counter -= 1
+                        elif ch == '<' and self.getPreviousCharacter() == '<' and \
+                                        self.getPreviousCharacters(2) != '<<' and \
+                                        self.getNextCharacter() != '<' and \
+                                not self.isInsideStringOrExpOrSubst():
+                            # heredoc
+                            self.insideHereDoc = True
+                            hereDocWord = self.getPartOfLineAfterPos()
+                            if hereDocWord[0] == '-':
+                                hereDocWord = hereDocWord[1:]
+                            hereDocWord = hereDocWord.strip().replace('"', '').replace("'", '')
+
                 escaped = False
             yield ch
             if _closeHereDocAfterYield:
@@ -135,9 +146,6 @@ class BashFileIterator:
 
     def isInsideString(self):
         return self.insideString
-
-    def isInsideHereDoc(self):
-        return self.insideHereDoc
 
     def isInsideDoubleQuotedString(self):
         return self.insideString and self._stringBeginsWith == '"'
@@ -157,8 +165,11 @@ class BashFileIterator:
     def isInsidePBE(self):
         return self._PBE_counter > 0
 
-    def isInsideStringOrHereDocOrCBEOrPBE(self):
-        return self.insideString or self.insideHereDoc or self.isInsideCBE() or self.isInsidePBE()
+    def isInsideStringOrExpOrSubst(self):
+        return self.insideString or self.isInsideCBE() or self.isInsidePBE()
+
+    def isInsideStringOrExpOrSubstOrHereDoc(self):
+        return self.isInsideStringOrExpOrSubst() or self.insideHereDoc
 
 
 def minify(src):
@@ -175,7 +186,7 @@ def minify(src):
     emptyLine = True
     previousSpacePrinted = True
     for ch in it.charactersGenerator():
-        if it.isInsideStringOrHereDocOrCBEOrPBE():
+        if it.isInsideStringOrExpOrSubstOrHereDoc():
             src += ch
         elif ch == "\\" and it.getNextCharacter() == "\n":
             # backslash at the very end of line means line continuation
@@ -198,7 +209,7 @@ def minify(src):
     it = BashFileIterator(src)
     src = ""  # result
     for ch in it.charactersGenerator():
-        if it.isInsideStringOrHereDocOrCBEOrPBE() or ch != "\n":
+        if it.isInsideStringOrExpOrSubstOrHereDoc() or ch != "\n":
             src += ch
         else:
             prevWord = it.getPreviousWord()
@@ -220,7 +231,7 @@ def minify(src):
     it = BashFileIterator(src)
     src = ""  # result
     for ch in it.charactersGenerator():
-        if it.isInsideStringOrHereDocOrCBEOrPBE():
+        if it.isInsideStringOrExpOrSubstOrHereDoc():
             src += ch
         elif ch in ' \t' and (it.getPreviousCharacter() in ";|" or it.getNextCharacter() in ";|"):
             continue
@@ -255,4 +266,3 @@ if __name__ == "__main__":
 #    unescaped double-quotes or single-quotes, if any, shall occur. A preceding <backslash> character shall be used
 #    to escape a literal '{' or '}'
 # 4.
-
