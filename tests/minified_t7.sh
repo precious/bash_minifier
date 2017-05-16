@@ -1,4 +1,4 @@
-isql <<EOF
+isql<<EOF
 select count(*) from
 table_A
 where a=b

@@ -236,7 +236,7 @@ def minify(src):
                     continue
                 else:
                     src += ' '
-            elif prevWord in ("then", "do", "else", "in", "elif") or it.getPreviousCharacter() in ("{", "(") or \
+            elif prevWord in ("then", "do", "else", "in", "elif", "if") or it.getPreviousCharacter() in ("{", "(") or \
                             it.getPreviousCharacters(2) in ("&&", "||"):
                 src += " "
             elif nextWord in ("esac",) and it.getPreviousCharacters(2) != ';;':
@@ -250,7 +250,7 @@ def minify(src):
     for ch in it.charactersGenerator():
         if it.isInsideStringOrExpOrSubstOrHereDoc():
             src += ch
-        elif ch in ' \t' and (it.getPreviousCharacter() in ";|" or it.getNextCharacter() in ";|"):
+        elif ch in ' \t' and (it.getPreviousCharacter() in "|&;<>" or it.getNextCharacter() in "|&;<>"):
             continue
         else:
             src += ch
