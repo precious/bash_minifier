@@ -162,7 +162,7 @@ class BashFileIterator:
             
             self.pos += 1
 
-        assert self.isStackEmpty(), 'Invalid syntax found ' + str(self._delimiters_stack)
+        assert self.isStackEmpty(), 'Invalid syntax'
         raise StopIteration
 
     def isInsideDoubleQuotedString(self):
