@@ -32,4 +32,7 @@ tr a-z A-Z <<< one;tr a-z A-Z <<< 'one two three';FOO='one two three';tr a-z A-Z
 two three';tr a-z A-Z <<< '
 one
 two three
-';bc <<< 2^10
+';tr a-z A-Z <<< "
+one
+two three
+";bc <<< 2^10

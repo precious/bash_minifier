@@ -60,4 +60,9 @@ one
 two three
 '
 
+tr a-z A-Z <<< "
+one
+two three
+"
+
 bc <<< 2^10
