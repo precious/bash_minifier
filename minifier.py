@@ -85,11 +85,13 @@ class BashFileIterator:
                 escaped = not escaped
             else:
                 # if (ch in "\"'`") and not escaped and not self.insideComment:
-                if (ch in "\"'") and not escaped and not self.isInsideCommentOrHereDoc():
+                if (ch in "\"'") and not self.isInsideCommentOrHereDoc():
                     if self.insideString and self._stringBeginsWith == ch:
-                        self._stringBeginsWith = ""
-                        self.insideString = False
-                    elif not self.insideString:
+                        if ch == '"' and not escaped or ch == "'":  # single quote can't be escaped inside
+                                                                    # single-quoted string
+                            self._stringBeginsWith = ""
+                            self.insideString = False
+                    elif not self.insideString and not escaped:
                         self._stringBeginsWith = ch
                         self.insideString = True
                 elif ch == "#" and not self.isInsideStringOrHereDocOrCBEOrPBE() and \
@@ -176,6 +178,7 @@ def minify(src):
         if it.isInsideStringOrHereDocOrCBEOrPBE():
             src += ch
         elif ch == "\\" and it.getNextCharacter() == "\n":
+            # backslash at the very end of line means line continuation
             it.skipNextCharacter()
             continue
         elif ch in " \t" and not previousSpacePrinted and not emptyLine and \
@@ -231,6 +234,7 @@ if __name__ == "__main__":
     # TODO check all bash keywords and ensure that they are handled correctly
     # https://www.gnu.org/software/bash/manual/html_node/Reserved-Word-Index.html
     # http://pubs.opengroup.org/onlinepubs/009695399/utilities/xcu_chap02.html
+    # http://pubs.opengroup.org/onlinepubs/9699919799/
 
     # get bash source from file or from stdin
     src = ""
@@ -240,3 +244,15 @@ if __name__ == "__main__":
     else:
         src = sys.stdin.read()
     print minify(src)
+
+
+# important rules:
+# 1. A single-quote cannot occur within single-quotes.
+# 2. The input characters within the double-quoted string that are also enclosed between "$(" and the matching ')'
+#    shall not be affected by the double-quotes, but rather shall define that command whose output replaces the "$(...)"
+#    when the word is expanded.
+# 3. Within the double-quoted string of characters from an enclosed "${" to the matching '}', an even number of
+#    unescaped double-quotes or single-quotes, if any, shall occur. A preceding <backslash> character shall be used
+#    to escape a literal '{' or '}'
+# 4.
+
