@@ -10,12 +10,12 @@ class BashFileIterator:
 
     def reset(self):
         self.pos = 0
-        self.insideString = False
         self.insideComment = False
         self.insideHereDoc = False
         self._CBE_counter = 0  # Curly Braces Expansion
         self._PBE_counter = 0  # Parenthesis Expansion
         self._stringBeginsWith = ""
+        self.escaped = False
 
         # possible characters in stack:
         # (, ) -- means Arithmetic Expansion or Command Substitution
@@ -24,6 +24,21 @@ class BashFileIterator:
         # ' -- means single-quoted string
         # " -- means double-quoted string
         self._delimiters_stack = []
+
+    def popLastDelimiter(self):
+        self._delimiters_stack.pop()  # do not check whether it's empty or not because we shouldn't pop from empty stack
+
+    def getLastDelimiter(self):
+        return self._delimiters_stack[-1] if not self.isStackEmpty() else ''
+
+    def pushDelimiter(self, delimiter):
+        self._delimiters_stack.append(delimiter)
+
+    def inStack(self, delimiter):
+        return delimiter in self._delimiters_stack
+
+    def isStackEmpty(self):
+        return len(self._delimiters_stack) == 0
 
     def getPreviousCharacters(self, n):
         return self.src[max(0, self.pos - n):self.pos]
@@ -76,6 +91,11 @@ class BashFileIterator:
         return result
 
     def skipNextCharacters(self, n):
+        """
+        be vary careful with skipping -- keep in mind possible escaping, quotes, substitution and expansions
+          DO NOT skip escape characters, single/double quotes, curly braces and parenthesis
+        """
+        self.escaped = False
         self.pos += n
 
     def skipNextCharacter(self):
@@ -84,14 +104,12 @@ class BashFileIterator:
     def charactersGenerator(self):
         hereDocWord = ''
         _closeHereDocAfterYield = False
-        escaped = False
         while self.pos < len(self.src):
             ch = self.src[self.pos]
-            # handle strings and comments
             if ch == "\\":
-                escaped = not escaped
+                self.escaped = not self.escaped
             else:
-                if ch == "\n":
+                if ch == "\n":  # handle strings
                     if self.insideComment:
                         self.insideComment = False
                     elif self.insideHereDoc and self.getPartOfLineBeforePos() == hereDocWord:
@@ -100,18 +118,20 @@ class BashFileIterator:
                 elif not self.isInsideCommentOrHereDoc():
 
                     if ch in "\"'":
-                        if self.insideString and self._stringBeginsWith == ch:
-                            if ch == '"' and not escaped or ch == "'":  # single quote can't be escaped inside
-                                # single-quoted string
-                                self._stringBeginsWith = ""
-                                self.insideString = False
-                        elif not self.insideString and not escaped:
-                            self._stringBeginsWith = ch
-                            self.insideString = True
+                        if ch == '"' and not self.escaped:
+                            if self.getLastDelimiter() == ch:
+                                self.popLastDelimiter()
+                            else:
+                                self.pushDelimiter(ch)
+                        elif ch == "'":
+                            if self.getLastDelimiter() == ch:
+                                self.popLastDelimiter()
+                            elif not self.escaped:
+                                self.pushDelimiter(ch)
 
                     elif not self.isInsideSingleQuotedString():
                         if ch == "#" and not self.isInsideStringOrExpOrSubst() and \
-                                        self.getPreviousCharacter() in "\n\t ;":
+                                        self.getPreviousCharacter() in "\n\t ;":  # handle comments
                             self.insideComment = True
                         elif ch == '{' and self.getPreviousCharacter() == '$' and not self.isInsideCBE():
                             self._CBE_counter = 1
@@ -136,22 +156,24 @@ class BashFileIterator:
                                 hereDocWord = hereDocWord[1:]
                             hereDocWord = hereDocWord.strip().replace('"', '').replace("'", '')
 
-                escaped = False
+                self.escaped = False
             yield ch
             if _closeHereDocAfterYield:
                 _closeHereDocAfterYield = False
                 self.insideHereDoc = False
             self.pos += 1
+
+        assert self.isStackEmpty(), 'Incorrect syntax found'
         raise StopIteration
 
     def isInsideString(self):
-        return self.insideString
+        return self.isInsideSingleQuotedString() or self.isInsideDoubleQuotedString()
 
     def isInsideDoubleQuotedString(self):
-        return self.insideString and self._stringBeginsWith == '"'
+        return self.inStack('"')
 
     def isInsideSingleQuotedString(self):
-        return self.insideString and self._stringBeginsWith == "'"
+        return self.inStack("'")
 
     def isInsideComment(self):
         return self.insideComment
@@ -166,7 +188,7 @@ class BashFileIterator:
         return self._PBE_counter > 0
 
     def isInsideStringOrExpOrSubst(self):
-        return self.insideString or self.isInsideCBE() or self.isInsidePBE()
+        return self.isInsideString() or self.isInsideCBE() or self.isInsidePBE()
 
     def isInsideStringOrExpOrSubstOrHereDoc(self):
         return self.isInsideStringOrExpOrSubst() or self.insideHereDoc
