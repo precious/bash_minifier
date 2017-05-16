@@ -30,10 +30,15 @@ class BashFileIterator:
             self._delimiters_stack.pop()
         elif delimiter == '}' and self.getLastDelimiter() == '{':
             self._delimiters_stack.pop()
-        elif delimiter in ('"', "'", '`') and delimiter == self.getLastDelimiter():
-            self._delimiters_stack.pop()
-        else:
+        elif delimiter in ('{', '}', '(', ')'):
             self._delimiters_stack.append(delimiter)
+        elif delimiter == "'" and self.getLastDelimiter() != '"' or \
+                delimiter == '"' and self.getLastDelimiter() != "'" or \
+                delimiter == '`':
+            if delimiter == self.getLastDelimiter():
+                self._delimiters_stack.pop()
+            else:
+                self._delimiters_stack.append(delimiter)
 
     def isStackEmpty(self):
         return len(self._delimiters_stack) == 0
