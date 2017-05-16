@@ -34,7 +34,10 @@ class MainPage(webapp2.RequestHandler):
     def returnMinifiedSource(self, user_source):
         processed_source = ""
         if user_source.strip():
-            processed_source = minifier.minify(user_source.replace("\r",""))
+            try:
+                processed_source = minifier.minify(user_source.replace("\r",""))
+            except Exception, e:
+                processed_source = str(e)
         self.response.headers["Content-Type"] = "text/html"
         params = dict(user_source=cgi.escape(user_source),
                       processed_source=cgi.escape(processed_source))
