@@ -1,1 +1,1 @@
-case "$1" in "a") echo "a";;"b") echo "b";;*);;esac
+case "$1" in "a")echo "a";;"b")echo "b";;*);;esac

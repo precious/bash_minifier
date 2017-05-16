@@ -247,10 +247,12 @@ def minify(src):
     # finally remove spaces around semicolons and pipes
     it = BashFileIterator(src)
     src = ""  # result
+    other_delimiters = "|&;<>()" # characters that may not be surrounded by whitespaces
     for ch in it.charactersGenerator():
         if it.isInsideStringOrExpOrSubstOrHereDoc():
             src += ch
-        elif ch in ' \t' and (it.getPreviousCharacter() in "|&;<>" or it.getNextCharacter() in "|&;<>"):
+        elif ch in ' \t' and (it.getPreviousCharacter() in other_delimiters or
+                              it.getNextCharacter() in other_delimiters):
             continue
         else:
             src += ch
