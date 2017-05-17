@@ -238,7 +238,7 @@ def minify(src):
                     continue
                 else:
                     src += ' '
-            elif prevWord in ("case", "then", "do", "else", "in", "elif", "if") or \
+            elif prevWord in ("while", "then", "do", "else", "in", "elif", "if") or \
                             nextWord in ("in",) or \
                             it.getPreviousCharacter() in ("{", "(") or \
                             it.getPreviousCharacters(2) in ("&&", "||"):
