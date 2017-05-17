@@ -33,8 +33,8 @@ class BashFileIterator:
         elif delimiter in ('{', '}', '(', ')'):
             self._delimiters_stack.append(delimiter)
         elif delimiter == "'" and self.getLastDelimiter() != '"' or \
-                delimiter == '"' and self.getLastDelimiter() != "'" or \
-                delimiter == '`':
+                                delimiter == '"' and self.getLastDelimiter() != "'" or \
+                        delimiter == '`':
             if delimiter == self.getLastDelimiter():
                 self._delimiters_stack.pop()
             else:
@@ -166,7 +166,7 @@ class BashFileIterator:
             if _closeHereDocAfterYield:
                 _closeHereDocAfterYield = False
                 self.insideHereDoc = False
-            
+
             self.pos += 1
 
         assert self.isStackEmpty(), 'Invalid syntax'
@@ -251,12 +251,12 @@ def minify(src):
     # finally remove spaces around semicolons and pipes
     it = BashFileIterator(src)
     src = ""  # result
-    other_delimiters = "|&;<>()" # characters that may not be surrounded by whitespaces
+    other_delimiters = "|&;<>()"  # characters that may not be surrounded by whitespaces
     for ch in it.charactersGenerator():
         if it.isInsideStringOrExpOrSubstOrHereDoc():
             src += ch
         elif ch in ' \t' and (it.getPreviousCharacter() in other_delimiters or
-                              it.getNextCharacter() in other_delimiters):
+                                      it.getNextCharacter() in other_delimiters):
             continue
         else:
             src += ch
