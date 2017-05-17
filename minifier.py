@@ -184,6 +184,9 @@ class BashFileIterator:
     def isInsideCommentOrHereDoc(self):
         return self.insideComment or self.insideHereDoc
 
+    def isInsideStringOrCommentOrHereDoc(self):
+        return self.isInsideSingleQuotedString() or self.isInsideDoubleQuotedString() or self.isInsideCommentOrHereDoc()
+
     def isInsideStringOrExpOrSubst(self):
         return not self.isStackEmpty()
 
@@ -253,7 +256,7 @@ def minify(src):
     src = ""  # result
     other_delimiters = "|&;<>()"  # characters that may not be surrounded by whitespaces
     for ch in it.charactersGenerator():
-        if it.isInsideStringOrExpOrSubstOrHereDoc():
+        if it.isInsideStringOrCommentOrHereDoc():
             src += ch
         elif ch in ' \t' and (it.getPreviousCharacter() in other_delimiters or
                                       it.getNextCharacter() in other_delimiters):
@@ -265,7 +268,6 @@ def minify(src):
 
 
 if __name__ == "__main__":
-    # TODO check all bash keywords and ensure that they are handled correctly
     # https://www.gnu.org/software/bash/manual/html_node/Reserved-Word-Index.html
     # http://pubs.opengroup.org/onlinepubs/009695399/utilities/xcu_chap02.html
     # http://pubs.opengroup.org/onlinepubs/9699919799/
