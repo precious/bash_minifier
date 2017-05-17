@@ -1,0 +1,5 @@
+true
+
+. o.sh
+
+false

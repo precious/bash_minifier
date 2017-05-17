@@ -133,6 +133,8 @@ class BashFileIterator:
                             if ch == "#" and not self.isInsideStringOrExpOrSubst() and \
                                             self.getPreviousCharacter() in "\n\t ;":  # handle comments
                                 self.insideComment = True
+                            elif ch == '`':
+                                self.pushDelimiter(ch)
                             elif ch == '$':
                                 next_char = self.getNextCharacter()
                                 if next_char in ('{', '('):
@@ -236,7 +238,7 @@ def minify(src):
                     continue
                 else:
                     src += ' '
-            elif prevWord in ("then", "do", "else", "in", "elif", "if") or \
+            elif prevWord in ("case", "then", "do", "else", "in", "elif", "if") or \
                             nextWord in ("in",) or \
                             it.getPreviousCharacter() in ("{", "(") or \
                             it.getPreviousCharacters(2) in ("&&", "||"):
