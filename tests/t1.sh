@@ -1,4 +1,7 @@
-  case "$1" in
+  case "$1"
+
+  in
+
      "a")  echo "a";;
      "b")  echo "b";;
      *)
