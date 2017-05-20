@@ -4,6 +4,32 @@ import sys
 
 
 class BashFileIterator:
+    class _Delimiter(object):
+        def __init__(self, character, _type=''):
+            self.character = character
+            # type may be 'A' (Arithmetic Expansion), 'S' (Command Substitution) or 'P' (Parameter Expansion)
+            # type is set only for parenthesis or curly brace that opens group
+            # e.g. in this statement $((1+2)) only the 1st '(' will have type ('A')
+            self.type = _type
+
+        def is_group_opening(self):
+            return bool(self.type or self.character in ("'", '"', '`'))
+
+        def __eq__(self, other):
+            if isinstance(other, BashFileIterator._Delimiter):
+                return other.character == self.character
+            elif isinstance(other, basestring):
+                return other == self.character
+            return False
+
+        def __ne__(self, other):
+            return not self.__eq__(other)
+
+        def __str__(self):
+            return self.character
+
+        __repr__ = __str__
+
     def __init__(self, src):
         self.src = src
         self.reset()
@@ -22,26 +48,36 @@ class BashFileIterator:
         self._delimiters_stack = []
         self._indices_of_escaped_characters = set()
 
-    def getLastDelimiter(self):
-        return self._delimiters_stack[-1] if not self.isStackEmpty() else ''
+    def getLastGroupOpeningDelimiter(self):
+        return next((d for d in reversed(self._delimiters_stack) if d.is_group_opening()),
+                    BashFileIterator._Delimiter(''))
 
-    def pushDelimiter(self, delimiter):
-        if delimiter == ')' and self.getLastDelimiter() == '(':
-            self._delimiters_stack.pop()
-        elif delimiter == '}' and self.getLastDelimiter() == '{':
-            self._delimiters_stack.pop()
-        elif delimiter in ('{', '}', '(', ')'):
-            self._delimiters_stack.append(delimiter)
-        elif delimiter == "'" and self.getLastDelimiter() != '"' or \
-                                delimiter == '"' and self.getLastDelimiter() != "'" or \
-                        delimiter == '`':
-            if delimiter == self.getLastDelimiter():
+    def pushDelimiter(self, character, _type=''):
+        d = BashFileIterator._Delimiter(character, _type=_type)
+        last_opening = self.getLastGroupOpeningDelimiter()
+        last = self._delimiters_stack[-1] if len(self._delimiters_stack) > 0 else BashFileIterator._Delimiter('')
+
+        if d in ('{', '}'):
+            if _type != '':  # delimiter that opens group
+                self._delimiters_stack.append(d)
+            elif d == '}' and last == '{':
+                self._delimiters_stack.pop()
+        elif d in ('(', ')'):
+            if _type != '':  # delimiter that opens group
+                self._delimiters_stack.append(d)
+            elif last_opening == '(':
+                if last == '(' and d == ')':
+                    self._delimiters_stack.pop()
+                else:
+                    self._delimiters_stack.append(d)
+        elif d == "'" and last_opening != '"' or d == '"' and last_opening != "'" or d == '`':
+            if d == last_opening:
                 self._delimiters_stack.pop()
             else:
-                self._delimiters_stack.append(delimiter)
+                self._delimiters_stack.append(d)
 
-    def isStackEmpty(self):
-        return len(self._delimiters_stack) == 0
+    def isInsideGroup(self):
+        return len(self._delimiters_stack) != 0
 
     def getPreviousCharacters(self, n, should_not_start_with_escaped=True):
         """
@@ -123,14 +159,14 @@ class BashFileIterator:
                         self.insideComment = False
                     elif self.insideHereDoc and self.getPartOfLineBeforePos() == hereDocWord:
                         callbacks_after_yield.append(close_heredoc)
-                elif not self.isInsideCommentOrHereDoc():
+                elif not self.isInsideComment() and not self.isInsideHereDoc():
                     if ch in ('"', "'"):
                         # single quote can't be escaped inside single-quoted string
                         if not self.isEscaped() or ch == "'" and self.isInsideSingleQuotedString():
                             self.pushDelimiter(ch)
                     elif not self.isInsideSingleQuotedString():
                         if not self.isEscaped():
-                            if ch == "#" and not self.isInsideStringOrExpOrSubst() and \
+                            if ch == "#" and not self.isInsideGroup() and \
                                     (self.getPreviousCharacter() in ('\n', '\t', ' ', ';') or self.pos == 0):
                                 # handle comments
                                 self.insideComment = True
@@ -139,13 +175,13 @@ class BashFileIterator:
                             elif ch == '$':
                                 next_char = self.getNextCharacter()
                                 if next_char in ('{', '('):
-                                    self.pushDelimiter(next_char)
+                                    next_2_chars = self.getNextCharacters(2)
+                                    _type = 'A' if next_2_chars == '((' else 'S' if next_char == '(' else 'P'
+                                    self.pushDelimiter(next_char, _type=_type)
                                     _yieldNextNCharactersAsIs = 1
-                            elif ch in ('{', '}') and self.getLastDelimiter() in ('{', '}'):
+                            elif ch in ('{', '}', '(', ')'):
                                 self.pushDelimiter(ch)
-                            elif ch in ('(', ')') and self.getLastDelimiter() in ('(', ')'):
-                                self.pushDelimiter(ch)
-                            elif ch == '<' and self.getNextCharacter() == '<' and not self.isInsideStringOrExpOrSubst():
+                            elif ch == '<' and self.getNextCharacter() == '<' and not self.isInsideGroup():
                                 _yieldNextNCharactersAsIs = 1
 
                                 # we should handle correctly heredocs and herestrings like this one:
@@ -166,32 +202,40 @@ class BashFileIterator:
 
             self.pos += 1
 
-        assert self.isStackEmpty(), 'Invalid syntax'
+        assert not self.isInsideGroup(), 'Invalid syntax'
         raise StopIteration
 
     def isEscaped(self):
         return self.pos in self._indices_of_escaped_characters
 
     def isInsideDoubleQuotedString(self):
-        return self.getLastDelimiter() == '"'
+        return self.getLastGroupOpeningDelimiter() == '"'
 
     def isInsideSingleQuotedString(self):
-        return self.getLastDelimiter() == "'"
+        return self.getLastGroupOpeningDelimiter() == "'"
 
     def isInsideComment(self):
         return self.insideComment
 
-    def isInsideCommentOrHereDoc(self):
-        return self.insideComment or self.insideHereDoc
+    def isInsideHereDoc(self):
+        return self.insideHereDoc
 
-    def isInsideStringOrCommentOrHereDoc(self):
-        return self.isInsideSingleQuotedString() or self.isInsideDoubleQuotedString() or self.isInsideCommentOrHereDoc()
+    def isInsideParameterExpansion(self):
+        return self.getLastGroupOpeningDelimiter() == '{'
 
-    def isInsideStringOrExpOrSubst(self):
-        return not self.isStackEmpty()
+    def isInsideArithmeticExpansion(self):
+        return self.getLastGroupOpeningDelimiter().type == 'A'
+
+    def isInsideCommandSubstitution(self):
+        last_opening_delimiter = self.getLastGroupOpeningDelimiter()
+        return last_opening_delimiter == '`' or last_opening_delimiter.type == 'S'
 
     def isInsideAnything(self):
-        return self.isInsideStringOrExpOrSubst() or self.insideHereDoc or self.insideComment
+        return self.isInsideGroup() or self.insideHereDoc or self.insideComment
+
+    def isInsideGroupWhereWhitespacesCannotBeTruncated(self):
+        return self.isInsideComment() or self.isInsideDoubleQuotedString() or self.isInsideDoubleQuotedString() or \
+               self.isInsideHereDoc() or self.isInsideParameterExpansion() or self.isInsideArithmeticExpansion()
 
 
 def minify(src):
@@ -202,7 +246,7 @@ def minify(src):
         if not it.isInsideComment():
             src += ch
 
-    # second remove empty strings and strip lines
+    # second remove empty strings, strip lines and truncate spaces (replace groups of whitespaces by single space)
     it = BashFileIterator(src)
     src = ""  # result
     emptyLine = True  # means that no characters has been printed in current line so far
@@ -216,9 +260,9 @@ def minify(src):
             # backslash at the very end of line means line continuation
             # so remove previous backslash and skip current newline character ch
             src = src[:-1]
-        elif it.isInsideAnything() or it.isEscaped():
+        elif it.isInsideGroupWhereWhitespacesCannotBeTruncated() or it.isEscaped():
             src += ch
-        elif ch in (' ', '\t') and not it.isEscaped() and not previousSpacePrinted and not emptyLine and \
+        elif ch in (' ', '\t') and not previousSpacePrinted and not emptyLine and \
                 not it.getNextCharacter() in (' ', '\t', '\n'):
             src += " "
             previousSpacePrinted = True
@@ -263,7 +307,7 @@ def minify(src):
     src = ""  # result
     other_delimiters = ('|', '&', ';', '<', '>', '(', ')')  # characters that may not be surrounded by whitespaces
     for ch in it.charactersGenerator():
-        if it.isInsideStringOrCommentOrHereDoc():
+        if it.isInsideGroupWhereWhitespacesCannotBeTruncated():
             src += ch
         elif ch in (' ', '\t') and (it.getPreviousCharacter() in other_delimiters or
                                             it.getNextCharacter() in other_delimiters):
