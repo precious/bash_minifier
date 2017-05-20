@@ -1,8 +1,17 @@
 # line continuation
 # it does not work inside comments and single quoted strings
 
+# all next 4 echos should look identically after minification
+echo "ab" "cd"
+
 echo "ab" \
 "cd"
+
+echo "ab"\
+ "cd"
+
+echo "ab" \
+ "cd"
 
 echo "double quoted:"
 echo "ab\

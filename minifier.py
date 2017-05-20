@@ -255,11 +255,15 @@ def minify(src):
         if it.isInsideSingleQuotedString():
             # first of all check single quoted string because line continuation does not work inside
             src += ch
-        elif ch == "\n" and it.isEscaped():
+        elif ch == "\\" and not it.isEscaped() and it.getNextCharacter() == "\n":
             # then check line continuation
+            # line continuation will occur on the next iteration. just skip this backslash
+            continue
+        elif ch == "\n" and it.isEscaped():
+            # line continuation occurred
             # backslash at the very end of line means line continuation
             # so remove previous backslash and skip current newline character ch
-            src = src[:-1]
+            continue
         elif it.isInsideGroupWhereWhitespacesCannotBeTruncated() or it.isEscaped():
             src += ch
         elif ch in (' ', '\t') and not previousSpacePrinted and not emptyLine and \
