@@ -39,6 +39,7 @@ class BashFileIterator:
                 self._delimiters_stack.pop()
             else:
                 self._delimiters_stack.append(delimiter)
+
     def isStackEmpty(self):
         return len(self._delimiters_stack) == 0
 
@@ -283,7 +284,8 @@ if __name__ == "__main__":
             src = ifile.read()
     else:
         src = sys.stdin.read()
-    print minify(src)
+    # use stdout.write instead of print to avoid newline at the end (print with comma at the end does not work)
+    sys.stdout.write(minify(src))
 
 
 # important rules:
