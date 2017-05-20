@@ -14,3 +14,10 @@ case "abc" in
     ( a | b| c ) echo y ;;
     1) echo z
 esac
+
+
+  case "e"
+
+  in
+     *) echo everything\;;
+   esac

@@ -12,7 +12,6 @@ class BashFileIterator:
         self.pos = 0
         self.insideComment = False
         self.insideHereDoc = False
-        self._escaped = False
 
         # possible characters in stack:
         # (, ) -- means Arithmetic Expansion or Command Substitution
@@ -21,6 +20,7 @@ class BashFileIterator:
         # ' -- means single-quoted string
         # " -- means double-quoted string
         self._delimiters_stack = []
+        self._indices_of_escaped_characters = set()
 
     def getLastDelimiter(self):
         return self._delimiters_stack[-1] if not self.isStackEmpty() else ''
@@ -39,15 +39,21 @@ class BashFileIterator:
                 self._delimiters_stack.pop()
             else:
                 self._delimiters_stack.append(delimiter)
-
     def isStackEmpty(self):
         return len(self._delimiters_stack) == 0
 
-    def getPreviousCharacters(self, n):
-        return self.src[max(0, self.pos - n):self.pos]
+    def getPreviousCharacters(self, n, should_not_start_with_escaped=True):
+        """
+        'should_not_start_with_escaped' means return empty string if the first character is escaped 
+        """
+        first_character_index = max(0, self.pos - n)
+        if first_character_index in self._indices_of_escaped_characters:
+            return ''
+        else:
+            return self.src[max(0, self.pos - n):self.pos]
 
-    def getPreviousCharacter(self):
-        return self.getPreviousCharacters(1)
+    def getPreviousCharacter(self, should_not_start_with_escaped=True):
+        return self.getPreviousCharacters(1, should_not_start_with_escaped=should_not_start_with_escaped)
 
     def getNextCharacters(self, n):
         return self.src[self.pos + 1:self.pos + n + 1]
@@ -93,45 +99,39 @@ class BashFileIterator:
             i -= 1
         return result
 
-    def skipNextCharacters(self, n):
-        """
-        be vary careful with skipping -- keep in mind possible escaping, quotes, substitution and expansions
-          DO NOT skip escape characters, single/double quotes, curly braces and parenthesis
-        """
-        self._escaped = False
-        self.pos += n
-
-    def skipNextCharacter(self):
-        self.skipNextCharacters(1)
-
     def charactersGenerator(self):
         hereDocWord = ''
-        _closeHereDocAfterYield = False
         _yieldNextNCharactersAsIs = 0
+
+        def close_heredoc():
+            self.insideHereDoc = False
+
+        callbacks_after_yield = []
 
         while self.pos < len(self.src):
             ch = self.src[self.pos]
 
             if _yieldNextNCharactersAsIs > 0:
                 _yieldNextNCharactersAsIs -= 1
-            elif ch == "\\":
-                self._escaped = not self._escaped
+            elif ch == "\\" and not self.isEscaped():
+                self._indices_of_escaped_characters.add(self.pos + 1)
             else:
                 if ch == "\n" and not self.isInsideSingleQuotedString() and not self.isInsideDoubleQuotedString():
                     # handle end of comments and heredocs
                     if self.insideComment:
                         self.insideComment = False
                     elif self.insideHereDoc and self.getPartOfLineBeforePos() == hereDocWord:
-                        _closeHereDocAfterYield = True
+                        callbacks_after_yield.append(close_heredoc)
                 elif not self.isInsideCommentOrHereDoc():
                     if ch in ('"', "'"):
                         # single quote can't be escaped inside single-quoted string
-                        if not self._escaped or ch == "'" and self.isInsideSingleQuotedString():
+                        if not self.isEscaped() or ch == "'" and self.isInsideSingleQuotedString():
                             self.pushDelimiter(ch)
                     elif not self.isInsideSingleQuotedString():
-                        if not self._escaped:
+                        if not self.isEscaped():
                             if ch == "#" and not self.isInsideStringOrExpOrSubst() and \
-                                            self.getPreviousCharacter() in "\n\t ;":  # handle comments
+                                    (self.getPreviousCharacter() in ('\n', '\t', ' ', ';') or self.pos == 0):
+                                # handle comments
                                 self.insideComment = True
                             elif ch == '`':
                                 self.pushDelimiter(ch)
@@ -160,17 +160,16 @@ class BashFileIterator:
 
             yield ch
 
-            if ch != "\\":
-                self._escaped = False
-
-            if _closeHereDocAfterYield:
-                _closeHereDocAfterYield = False
-                self.insideHereDoc = False
+            while len(callbacks_after_yield) > 0:
+                callbacks_after_yield.pop()()
 
             self.pos += 1
 
         assert self.isStackEmpty(), 'Invalid syntax'
         raise StopIteration
+
+    def isEscaped(self):
+        return self.pos in self._indices_of_escaped_characters
 
     def isInsideDoubleQuotedString(self):
         return self.getLastDelimiter() == '"'
@@ -205,24 +204,26 @@ def minify(src):
     # second remove empty strings and strip lines
     it = BashFileIterator(src)
     src = ""  # result
-    emptyLine = True
+    emptyLine = True  # means that no characters has been printed in current line so far
     previousSpacePrinted = True
     for ch in it.charactersGenerator():
         if it.isInsideStringOrExpOrSubstOrHereDoc():
             src += ch
-        elif ch == "\\" and it.getNextCharacter() == "\n":
+        elif ch == "\n" and it.isEscaped():
             # backslash at the very end of line means line continuation
-            it.skipNextCharacter()
-            continue
-        elif ch in " \t" and not previousSpacePrinted and not emptyLine and \
-                not it.getNextCharacter() in " \t\n" and not it.getNextCharacters(2) == "\\\n":
+            # so remove previous backslash and skip current newline character ch
+            src = src[:-1]
+        elif it.isEscaped():
+            src += ch
+        elif ch in (' ', '\t') and not it.isEscaped() and not previousSpacePrinted and not emptyLine and \
+                not it.getNextCharacter() in (' ', '\t', '\n'):
             src += " "
             previousSpacePrinted = True
         elif ch == "\n" and it.getPreviousCharacter() != "\n" and not emptyLine:
             src += ch
             previousSpacePrinted = True
             emptyLine = True
-        elif ch not in " \t\n":
+        elif ch not in (' ', '\t', '\n'):
             src += ch
             previousSpacePrinted = False
             emptyLine = False
@@ -236,7 +237,7 @@ def minify(src):
         else:
             prevWord = it.getPreviousWord()
             nextWord = it.getNextWord()
-            if it.getNextCharacter() in '{':  # functions declaration, see test t8.sh
+            if it.getNextCharacter() == '{':  # functions declaration, see test t8.sh
                 if it.getPreviousCharacter() == ')':
                     continue
                 else:
@@ -247,19 +248,22 @@ def minify(src):
                             it.getPreviousCharacters(2) in ("&&", "||"):
                 src += " "
             elif nextWord in ("esac",) and it.getPreviousCharacters(2) != ';;':
-                src += ';;'
+                if it.getPreviousCharacter() == ';':
+                    src += ';'
+                else:
+                    src += ';;'
             elif it.getNextCharacter() != "" and it.getPreviousCharacter() != ";":
                 src += ";"
 
     # finally remove spaces around semicolons and pipes
     it = BashFileIterator(src)
     src = ""  # result
-    other_delimiters = "|&;<>()"  # characters that may not be surrounded by whitespaces
+    other_delimiters = ('|', '&', ';', '<', '>', '(', ')')  # characters that may not be surrounded by whitespaces
     for ch in it.charactersGenerator():
         if it.isInsideStringOrCommentOrHereDoc():
             src += ch
-        elif ch in ' \t' and (it.getPreviousCharacter() in other_delimiters or
-                                      it.getNextCharacter() in other_delimiters):
+        elif ch in (' ', '\t') and (it.getPreviousCharacter() in other_delimiters or
+                                            it.getNextCharacter() in other_delimiters):
             continue
         else:
             src += ch
