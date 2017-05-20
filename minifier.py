@@ -7,9 +7,10 @@ class BashFileIterator:
     class _Delimiter(object):
         def __init__(self, character, _type=''):
             self.character = character
-            # type may be 'A' (Arithmetic Expansion), 'S' (Command Substitution) or 'P' (Parameter Expansion)
-            # type is set only for parenthesis or curly brace that opens group
-            # e.g. in this statement $((1+2)) only the 1st '(' will have type ('A')
+            # type may be 'AP' or 'AS' (Arithmetic Expansion delimited by (()) or [] respectively),
+            #             'S' (Command Substitution) or 'P' (Parameter Expansion)
+            # type is set only for parenthesis or curly brace and square brace that opens group
+            # e.g. in this statement $((1+2)) only the 1st '(' will have type ('AP')
             self.type = _type
 
         def is_group_opening(self):
@@ -42,6 +43,7 @@ class BashFileIterator:
         # possible characters in stack:
         # (, ) -- means Arithmetic Expansion or Command Substitution
         # {, } -- means Parameter Expansion
+        # [, ] -- means Arithmetic Expansion
         # ` -- means Command Substitution
         # ' -- means single-quoted string
         # " -- means double-quoted string
@@ -67,6 +69,14 @@ class BashFileIterator:
                 self._delimiters_stack.append(d)
             elif last_opening == '(':
                 if last == '(' and d == ')':
+                    self._delimiters_stack.pop()
+                else:
+                    self._delimiters_stack.append(d)
+        elif d in ('[', ']'):
+            if _type != '':  # delimiter that opens group
+                self._delimiters_stack.append(d)
+            elif last_opening == '[':
+                if last == '[' and d == ']':
                     self._delimiters_stack.pop()
                 else:
                     self._delimiters_stack.append(d)
@@ -174,12 +184,12 @@ class BashFileIterator:
                                 self.pushDelimiter(ch)
                             elif ch == '$':
                                 next_char = self.getNextCharacter()
-                                if next_char in ('{', '('):
+                                if next_char in ('{', '(', '['):
                                     next_2_chars = self.getNextCharacters(2)
-                                    _type = 'A' if next_2_chars == '((' else 'S' if next_char == '(' else 'P'
+                                    _type = 'AP' if next_2_chars == '((' else {'{': 'P', '(': 'S', '[': 'AS'}[next_char]
                                     self.pushDelimiter(next_char, _type=_type)
                                     _yieldNextNCharactersAsIs = 1
-                            elif ch in ('{', '}', '(', ')'):
+                            elif ch in ('{', '}', '(', ')', '[', ']'):
                                 self.pushDelimiter(ch)
                             elif ch == '<' and self.getNextCharacter() == '<' and not self.isInsideGroup():
                                 _yieldNextNCharactersAsIs = 1
@@ -224,7 +234,7 @@ class BashFileIterator:
         return self.getLastGroupOpeningDelimiter() == '{'
 
     def isInsideArithmeticExpansion(self):
-        return self.getLastGroupOpeningDelimiter().type == 'A'
+        return self.getLastGroupOpeningDelimiter().type in ('AP', 'AS')
 
     def isInsideCommandSubstitution(self):
         last_opening_delimiter = self.getLastGroupOpeningDelimiter()
