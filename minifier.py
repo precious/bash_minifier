@@ -245,7 +245,7 @@ class BashFileIterator:
 
     def isInsideGroupWhereWhitespacesCannotBeTruncated(self):
         return self.isInsideComment() or self.isInsideDoubleQuotedString() or self.isInsideDoubleQuotedString() or \
-               self.isInsideHereDoc() or self.isInsideParameterExpansion() or self.isInsideArithmeticExpansion()
+               self.isInsideHereDoc() or self.isInsideParameterExpansion()
 
 
 def minify(src):
