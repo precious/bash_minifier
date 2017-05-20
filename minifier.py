@@ -190,8 +190,8 @@ class BashFileIterator:
     def isInsideStringOrExpOrSubst(self):
         return not self.isStackEmpty()
 
-    def isInsideStringOrExpOrSubstOrHereDoc(self):
-        return self.isInsideStringOrExpOrSubst() or self.insideHereDoc
+    def isInsideAnything(self):
+        return self.isInsideStringOrExpOrSubst() or self.insideHereDoc or self.insideComment
 
 
 def minify(src):
@@ -208,13 +208,15 @@ def minify(src):
     emptyLine = True  # means that no characters has been printed in current line so far
     previousSpacePrinted = True
     for ch in it.charactersGenerator():
-        if it.isInsideStringOrExpOrSubstOrHereDoc():
+        if it.isInsideSingleQuotedString():
+            # first of all check single quoted string because line continuation does not work inside
             src += ch
         elif ch == "\n" and it.isEscaped():
+            # then check line continuation
             # backslash at the very end of line means line continuation
             # so remove previous backslash and skip current newline character ch
             src = src[:-1]
-        elif it.isEscaped():
+        elif it.isInsideAnything() or it.isEscaped():
             src += ch
         elif ch in (' ', '\t') and not it.isEscaped() and not previousSpacePrinted and not emptyLine and \
                 not it.getNextCharacter() in (' ', '\t', '\n'):
@@ -233,7 +235,7 @@ def minify(src):
     it = BashFileIterator(src)
     src = ""  # result
     for ch in it.charactersGenerator():
-        if it.isInsideStringOrExpOrSubstOrHereDoc() or ch != "\n":
+        if it.isInsideAnything() or ch != "\n":
             src += ch
         else:
             prevWord = it.getPreviousWord()
