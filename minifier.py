@@ -313,7 +313,7 @@ def minify(src):
                     src += ';'
                 else:
                     src += ';;'
-            elif it.getNextCharacter() != "" and it.getPreviousCharacter() != ";":
+            elif it.getNextCharacter() != "" and it.getPreviousCharacter() not in (";", '|'):
                 src += ";"
 
     # finally: remove spaces around semicolons and pipes and other delimiters
