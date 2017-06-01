@@ -249,14 +249,14 @@ class BashFileIterator:
 
 
 def minify(src):
-    # first remove all comments
+    # first: remove all comments
     it = BashFileIterator(src)
     src = ""  # result
     for ch in it.charactersGenerator():
         if not it.isInsideComment():
             src += ch
 
-    # second remove empty strings, strip lines and truncate spaces (replace groups of whitespaces by single space)
+    # secondly: remove empty strings, strip lines and truncate spaces (replace groups of whitespaces by single space)
     it = BashFileIterator(src)
     src = ""  # result
     emptyLine = True  # means that no characters has been printed in current line so far
@@ -289,7 +289,7 @@ def minify(src):
             previousSpacePrinted = False
             emptyLine = False
 
-    # third get rid of newlines
+    # thirdly: get rid of newlines
     it = BashFileIterator(src)
     src = ""  # result
     for ch in it.charactersGenerator():
@@ -316,15 +316,18 @@ def minify(src):
             elif it.getNextCharacter() != "" and it.getPreviousCharacter() != ";":
                 src += ";"
 
-    # finally remove spaces around semicolons and pipes
+    # finally: remove spaces around semicolons and pipes and other delimiters
     it = BashFileIterator(src)
     src = ""  # result
     other_delimiters = ('|', '&', ';', '<', '>', '(', ')')  # characters that may not be surrounded by whitespaces
     for ch in it.charactersGenerator():
         if it.isInsideGroupWhereWhitespacesCannotBeTruncated():
             src += ch
-        elif ch in (' ', '\t') and (it.getPreviousCharacter() in other_delimiters or
-                                            it.getNextCharacter() in other_delimiters):
+        elif ch in (' ', '\t') \
+                and (it.getPreviousCharacter() in other_delimiters or
+                             it.getNextCharacter() in other_delimiters) \
+                and it.getNextCharacters(2) not in ('<(', '>('):  # process substitution
+                                                                    # see test t_process_substitution.sh for details
             continue
         else:
             src += ch
