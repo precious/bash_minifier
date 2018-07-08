@@ -2,7 +2,11 @@
 
 import sys
 
-
+try:
+  basestring
+except NameError:
+  basestring = str
+  
 class BashFileIterator:
     class _Delimiter(object):
         def __init__(self, character, _type=''):
