@@ -19,7 +19,7 @@ class BashFileIterator:
         def __eq__(self, other):
             if isinstance(other, BashFileIterator._Delimiter):
                 return other.character == self.character
-            elif isinstance(other, basestring):
+            elif isinstance(other, str):
                 return other == self.character
             return False
 
@@ -213,7 +213,7 @@ class BashFileIterator:
             self.pos += 1
 
         assert not self.isInsideGroup(), 'Invalid syntax'
-        raise StopIteration
+        # raise StopIteration # XXX I'm not too confident of the purpose of this, but it works without it.
 
     def isEscaped(self):
         return self.pos in self._indices_of_escaped_characters
