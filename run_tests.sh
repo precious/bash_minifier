@@ -5,7 +5,7 @@ passed=0
 failed=0
 for f in t*.sh; do
     echo -n "$f "
-    python ../minifier.py $f > _tmp_$f
+    python3 ../minifier.py $f > _tmp_$f
     if [ `diff _tmp_$f minified_$f | wc -c` -ne 0 ]; then
         failed=$((failed+1))
         echo FAILED
